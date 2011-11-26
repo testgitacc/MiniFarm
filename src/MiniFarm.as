@@ -2,19 +2,114 @@ package {
 	import flash.display.Sprite;
 	import flash.display.StageAlign;
 	import flash.display.StageScaleMode;
+	import flash.geom.Point;
+	import flash.utils.flash_proxy;
 
+	
 	public class MiniFarm extends Sprite {
+		private var field:FarmField = new FarmField();
+		private var tb:Toolbar = new Toolbar();
+		private var toPlant:ToPlant;
 		public function MiniFarm() {
 			stage.scaleMode=StageScaleMode.NO_SCALE;
 			stage.align=StageAlign.TOP_LEFT;
 
-			var field:FarmField = new FarmField();
 			addChild(field);			
-			var tb:Toolbar = new Toolbar();
 			addChild(tb);			
 		}
+		
+		public function startPlant():void
+		{
+			trace("startPlant");
+			if (toPlant == null)
+			{
+				toPlant=new ToPlant();
+				field.addChild(toPlant);
+			}
+			var p:Point=new Point(mouseX,mouseY);
+//			trace(mouseX);
+			toPlant.x=field.globalToLocal(p).x-toPlant.width/2;
+			toPlant.y=field.globalToLocal(p).y-toPlant.height/2;
+			toPlant.startDrag();
+			toPlant.visible=true;
+		}
+		
 	}
 }	
+
+var resources:Object=new Object();
+
+import flash.display.Loader;
+class ResourceLoader extends Loader
+{
+	public var url:String;
+}
+
+import flash.display.Bitmap;
+import flash.display.BitmapData;
+import flash.display.Loader;
+import flash.display.Sprite;
+import flash.events.*;
+import flash.events.MouseEvent;
+import flash.external.ExternalInterface;
+import flash.geom.Point;
+import flash.geom.Rectangle;
+import flash.net.URLRequest;
+class ToPlant extends Sprite 
+{
+	private var url:String = "../assets/sunflower/5.png";
+	
+	public function ToPlant() {
+		loadPic(url);
+		addEventListener(MouseEvent.CLICK, clickHandler);
+		addEventListener(MouseEvent.MOUSE_WHEEL, mouseWheelHandler);
+		startDrag();
+	}
+	
+	
+	private function loadPic(url:String):void {
+		var loader:ResourceLoader = new ResourceLoader();
+		loader.contentLoaderInfo.addEventListener(Event.COMPLETE, completeHandler);
+		loader.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR, ioErrorHandler);
+		loader.url=url;
+		var request:URLRequest = new URLRequest(url);
+		loader.load(request);
+		addChild(loader);
+	}
+	
+	private function completeHandler(event:Event):void {
+		var loader:ResourceLoader = ResourceLoader(event.target.loader);
+		trace(loader.url);
+		var image:Bitmap = Bitmap(loader.content);
+		addChild(image);
+		
+		var p:Point=new Point(mouseX,mouseY);
+		p=parent.globalToLocal(localToGlobal(p));
+		x=p.x-width/2;
+		y=p.y-height/2;
+	}
+	
+	private function ioErrorHandler(event:IOErrorEvent):void {
+		trace("Unable to load image: " + url);
+	}	
+	
+	
+	private function clickHandler(event:MouseEvent):void {
+		trace("clickHandler");
+		stopDrag();
+		visible=false;
+	}
+	
+	
+	
+	private function mouseWheelHandler(event:MouseEvent):void {
+		trace("ToPlantmouseWheelHandler delta: " + event.delta);
+		event.stopPropagation();
+	}
+	
+	
+}
+
 
 import flash.display.Bitmap;
 import flash.display.BitmapData;
@@ -99,6 +194,7 @@ class Toolbar extends Sprite {
 		b1.x=10;
 		b1.y=10;
 		addChild(b1);
+		b1.addEventListener(MouseEvent.CLICK, b1ClickHandler);
 		var b2:Button=new Button("Собрать");
 		b2.x=10;
 		b2.y=40;
@@ -108,6 +204,9 @@ class Toolbar extends Sprite {
 		b3.y=70;
 		addChild(b3);
 	}
+	private function b1ClickHandler(event:MouseEvent):void {
+		root["startPlant"]();
+	}	
 }
 
 import flash.display.DisplayObject;
@@ -117,8 +216,6 @@ import flash.display.Sprite;
 import flash.text.TextField;
 import flash.text.TextFieldAutoSize;
 import flash.text.TextFormat;
-
-
 
 class Button extends SimpleButton {
 	private var upColor:uint   = 0xCCCCCC;
