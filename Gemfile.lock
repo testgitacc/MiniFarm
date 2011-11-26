@@ -28,6 +28,9 @@ GEM
       dm-core (~> 1.2.0)
     dm-migrations (1.2.0)
       dm-core (~> 1.2.0)
+    dm-mysql-adapter (1.2.0)
+      dm-do-adapter (~> 1.2.0)
+      do_mysql (~> 0.10.6)
     dm-postgres-adapter (1.2.0)
       dm-do-adapter (~> 1.2.0)
       do_postgres (~> 0.10.6)
@@ -51,6 +54,8 @@ GEM
       uuidtools (~> 2.1.2)
     dm-validations (1.2.0)
       dm-core (~> 1.2.0)
+    do_mysql (0.10.7)
+      data_objects (= 0.10.7)
     do_postgres (0.10.7)
       data_objects (= 0.10.7)
     fastercsv (1.5.4)
@@ -77,5 +82,6 @@ PLATFORMS
 DEPENDENCIES
   asunit4 (>= 4.2.3.pre)
   data_mapper
+  dm-mysql-adapter
   dm-postgres-adapter
   flashsdk (>= 1.0.0.pre)

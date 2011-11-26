@@ -5,18 +5,55 @@ package {
 	import flash.geom.Point;
 	import flash.utils.flash_proxy;
 
+	import flash.events.*;
+	import flash.net.XMLSocket;
 	
 	public class MiniFarm extends Sprite {
 		private var field:FarmField = new FarmField();
 		private var tb:Toolbar = new Toolbar();
 		private var toPlant:ToPlant;
+		
+		private var xmlSocket:XMLSocket = new XMLSocket();
+		
 		public function MiniFarm() {
 			stage.scaleMode=StageScaleMode.NO_SCALE;
 			stage.align=StageAlign.TOP_LEFT;
 
 			addChild(field);			
-			addChild(tb);			
+			addChild(tb);
+			
+			
+			xmlSocket.connect("localhost", 11843);
+			
+			xmlSocket.addEventListener(DataEvent.DATA, onIncomingData);
+			connect();
+			//disconnect();
+			
+			
 		}
+
+		
+		private function connect():void
+		{
+			xmlSocket.send("GET_FIELD");
+		}
+		
+		private function disconnect():void
+		{
+			xmlSocket.send("DISCONNECT");
+			//xmlSocket.close();
+		}
+		
+		private function onIncomingData(event:DataEvent):void
+		{
+			trace("[" + event.type + "] " + event.data);
+			var xml:XML = new XML(event.data);
+			trace(xml);
+		}
+		
+		
+		
+		
 		
 		public function startPlant():void
 		{
@@ -34,10 +71,24 @@ package {
 			toPlant.visible=true;
 		}
 		
+		public function finishPlant():void
+		{
+			toPlant.stopDrag();
+			
+			xmlSocket.send("<newPlant><"+toPlant.plantName+" x=\""+toPlant.x.toString()+"\""+" y=\""+toPlant.y.toString()+"\" /></newPlant>");
+			
+			toPlant.visible=false;
+		}
+		
+		
 	}
 }	
 
 var resources:Object=new Object();
+
+
+
+
 
 import flash.display.Loader;
 class ResourceLoader extends Loader
@@ -58,6 +109,7 @@ import flash.net.URLRequest;
 class ToPlant extends Sprite 
 {
 	private var url:String = "../assets/sunflower/5.png";
+	public var plantName:String="sunflower";
 	
 	public function ToPlant() {
 		loadPic(url);
@@ -90,14 +142,13 @@ class ToPlant extends Sprite
 	}
 	
 	private function ioErrorHandler(event:IOErrorEvent):void {
-		trace("Unable to load image: " + url);
+		trace("Unable to load image: " + event.target.loader["url"]);
 	}	
 	
 	
 	private function clickHandler(event:MouseEvent):void {
 		trace("clickHandler");
-		stopDrag();
-		visible=false;
+		root["finishPlant"]();
 	}
 	
 	
