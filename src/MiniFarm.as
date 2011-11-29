@@ -10,7 +10,7 @@ package {
 	public class MiniFarm extends Sprite {
 		private var field:FarmField = new FarmField();
 		private var tb:Toolbar = new Toolbar();
-		private var toPlant:ToPlant;
+		private var newPlant:NewPlant;
 		
 		private var xmlSocket:XMLSocket = new XMLSocket();
 		
@@ -72,33 +72,80 @@ package {
 		public function startPlant():void
 		{
 			trace("startPlant");
-			if (toPlant == null)
+			if (newPlant == null)
 			{
-				toPlant=new ToPlant();
-				field.layerNew.addChild(toPlant);
+				newPlant=new NewPlant();
+				field.layerNew.addChild(newPlant);
 			}
 			var p:Point=new Point(mouseX,mouseY);
 //			trace(mouseX);
-			toPlant.x=field.globalToLocal(p).x-toPlant.width/2;
-			toPlant.y=field.globalToLocal(p).y-toPlant.height/2;
-			toPlant.startDrag();
-			toPlant.visible=true;
+			newPlant.x=field.globalToLocal(p).x-newPlant.width/2;
+			newPlant.y=field.globalToLocal(p).y-newPlant.height/2;
+			newPlant.startDrag();
+			newPlant.visible=true;
 		}
 		
 		public function finishPlant():void
 		{
-			toPlant.stopDrag();
-			
-			xmlSocket.send("<newPlant><"+toPlant.plantName+" x=\""+toPlant.x.toString()+"\""+" y=\""+toPlant.y.toString()+"\" /></newPlant>");
-			
-			toPlant.visible=false;
+			newPlant.stopDrag();
+			xmlSocket.send("<newPlant><"+newPlant.plantName+" x=\""+newPlant.x.toString()+"\""+" y=\""+newPlant.y.toString()+"\" /></newPlant>");
+			newPlant.visible=false;
 		}
 		
 		
 	}
 }	
 
-var resources:Object=new Object();
+class Resources extends Object
+{
+	private var cache:Object=new Object();
+	private var loaders:Object=new Object();
+	
+	public function load(url:String,onLoad:Function):void
+	{
+		if (cache[url] != undefined)
+		{
+			trace("resource from cache " + url);
+			onLoad(cache[url]);
+		}
+		else if(loaders[url] == undefined)
+		{
+			var loader:ResourceLoader = new ResourceLoader();
+			loaders[url] = new ResourceLoader();
+			loaders[url].contentLoaderInfo.addEventListener(Event.COMPLETE, completeHandler);
+			loaders[url].contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR, ioErrorHandler);
+			loaders[url].url=url;
+			loaders[url].onLoads.push(onLoad);
+			var request:URLRequest = new URLRequest(url);
+			loaders[url].load(request);
+		}
+		else
+		{
+			loaders[url].onLoads.push(onLoad);
+		}
+	}
+	
+	private function completeHandler(event:Event):void 
+	{
+		var loader:ResourceLoader = ResourceLoader(event.target.loader);
+
+		cache[loader.url] = loader.content;
+		trace("Resources content loaded "+loader.url);
+		trace(cache[loader.url]);
+		trace("Resources image loaded "+loader.url);
+		for each (var onLoad:Function in loader.onLoads)
+		{
+			onLoad(cache[loader.url]);
+		}
+	}
+	
+	private function ioErrorHandler(event:IOErrorEvent):void {
+		trace("Unable to load image: " + event.target.loader["url"]);
+	}			
+	
+}
+
+var resources:Resources=new Resources();
 
 
 
@@ -108,72 +155,10 @@ import flash.display.Loader;
 class ResourceLoader extends Loader
 {
 	public var url:String;
+	public var onLoads:Array=new Array();
 }
 
-import flash.display.Bitmap;
-import flash.display.BitmapData;
-import flash.display.Loader;
-import flash.display.Sprite;
-import flash.events.*;
-import flash.events.MouseEvent;
-import flash.external.ExternalInterface;
-import flash.geom.Point;
-import flash.geom.Rectangle;
-import flash.net.URLRequest;
-class ToPlant extends Sprite 
-{
-	private var url:String = "../assets/sunflower/5.png";
-	public var plantName:String="sunflower";
-	
-	public function ToPlant() {
-		loadPic(url);
-		addEventListener(MouseEvent.CLICK, clickHandler);
-		addEventListener(MouseEvent.MOUSE_WHEEL, mouseWheelHandler);
-		startDrag();
-	}
-	
-	
-	private function loadPic(url:String):void {
-		var loader:ResourceLoader = new ResourceLoader();
-		loader.contentLoaderInfo.addEventListener(Event.COMPLETE, completeHandler);
-		loader.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR, ioErrorHandler);
-		loader.url=url;
-		var request:URLRequest = new URLRequest(url);
-		loader.load(request);
-		addChild(loader);
-	}
-	
-	private function completeHandler(event:Event):void {
-		var loader:ResourceLoader = ResourceLoader(event.target.loader);
-		trace(loader.url);
-		var image:Bitmap = Bitmap(loader.content);
-		addChild(image);
-		
-		var p:Point=new Point(mouseX,mouseY);
-		p=parent.globalToLocal(localToGlobal(p));
-		x=p.x-width/2;
-		y=p.y-height/2;
-	}
-	
-	private function ioErrorHandler(event:IOErrorEvent):void {
-		trace("Unable to load image: " + event.target.loader["url"]);
-	}	
-	
-	
-	private function clickHandler(event:MouseEvent):void {
-		trace("clickHandler");
-		root["finishPlant"]();
-	}
-	
-	
-	
-	private function mouseWheelHandler(event:MouseEvent):void {
-		trace("ToPlantmouseWheelHandler delta: " + event.delta);
-		event.stopPropagation();
-	}
-	
-	
-}
+
 
 import flash.display.Sprite;
 import flash.display.Bitmap;
@@ -193,7 +178,7 @@ class Plant extends Sprite
 	public var id:int;
 	public var stageOfGrowth:int;
 	public var plantName:String;
-
+	
 	private var image:Bitmap;
 	
 	public function Plant(plantName:String, plantId:int, plantX:int, plantY:int, plantStage:int)
@@ -212,51 +197,100 @@ class Plant extends Sprite
 		{
 			removeChild(image);
 		}
-		if(resources["../assets/"+plantName+"/"+stageOfGrowth.toString()+".png"] is BitmapData)
+		resources.load("../assets/"+plantName+"/"+stageOfGrowth.toString()+".png",onLoad);
+	}
+	
+	protected function onLoad(img:Bitmap):void
+	{
+		trace("plant onLoad "+img);
+		trace(this);
+		trace(id);
+		image=new Bitmap(img.bitmapData);
+		addChild(image);
+		afterLoad();
+	}
+
+	protected  function afterLoad():void{};
+	
+}
+
+
+
+import flash.display.Bitmap;
+import flash.display.BitmapData;
+import flash.display.Loader;
+import flash.display.Sprite;
+import flash.events.*;
+import flash.events.MouseEvent;
+import flash.external.ExternalInterface;
+import flash.geom.Point;
+import flash.geom.Rectangle;
+import flash.net.URLRequest;
+class NewPlant extends Plant 
+{
+	private var plantNames:Array=["sunflower","clover","potato"];
+	
+	public function NewPlant() 
+	{
+		super(plantNames[0], 0, 0, 0, 5);
+		addEventListener(MouseEvent.CLICK, clickHandler);
+		addEventListener(MouseEvent.MOUSE_WHEEL, mouseWheelHandler);
+		startDrag();
+	}
+	
+	protected override function afterLoad():void
+	{
+		var p:Point=new Point(mouseX,mouseY);
+		p=parent.globalToLocal(localToGlobal(p));
+		x=p.x-width/2;
+		y=p.y-height/2;
+	}
+	
+	private function clickHandler(event:MouseEvent):void {
+		trace("newPlant clickHandler");
+		root["finishPlant"]();
+	}
+	
+	private function mouseWheelHandler(event:MouseEvent):void {
+		trace("NewPlantmouseWheelHandler delta: " + event.delta);
+		if(event.delta>0)
 		{
-			image=new Bitmap(resources["../assets/"+plantName+"/"+stageOfGrowth.toString()+".png"]);
-			addChild(image);
+			nextPlant();
 		}
 		else
 		{
-			loadPic("../assets/"+plantName+"/"+stageOfGrowth.toString()+".png");
+			previousPlant();
 		}
-			
+		redraw();
+		event.stopPropagation();
 	}
 	
-	private function loadPic(url:String):void {
-		var loader:ResourceLoader = new ResourceLoader();
-		loader.contentLoaderInfo.addEventListener(Event.COMPLETE, completeHandler);
-		loader.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR, ioErrorHandler);
-		loader.url=url;
-		var request:URLRequest = new URLRequest(url);
-		loader.load(request);
-		addChild(loader);
-	}
-	
-	private function completeHandler(event:Event):void {
-		var loader:ResourceLoader = ResourceLoader(event.target.loader);
-		
-		resources[loader.url] = loader.content;
-		trace("plant content loaded "+loader.url);
-		trace(parent);
-		trace(resources[loader.url]);
-		if(resources[loader.url] is BitmapData)
+	private function nextPlant():void
+	{
+		var i:int=plantNames.indexOf(plantName);
+		if(i==plantNames.length-1)
 		{
-			image=new Bitmap(resources[loader.url]);
-			addChild(image);
-			trace("plant image loaded "+loader.url);
-			trace(parent);
-		}		
-//		var image:Bitmap = Bitmap(loader.content);
-//		addChild(image);
+			plantName=plantNames[0];
+		}
+		else
+		{
+			plantName=plantNames[i+1];
+		}
 	}
-	
-	private function ioErrorHandler(event:IOErrorEvent):void {
-		trace("Unable to load image: " + event.target.loader["url"]);
-	}		
-	
+	private function previousPlant():void
+	{
+		var i:int=plantNames.indexOf(plantName);
+		if(i==0)
+		{
+			plantName=plantNames[plantNames.length-1];
+		}
+		else
+		{
+			plantName=plantNames[i-1];
+		}
+	}
 }
+
 
 import flash.display.Bitmap;
 import flash.display.BitmapData;
@@ -332,50 +366,26 @@ class FarmField extends Sprite
 	
 	
 	
-	private function loadBG():void {
-		
-		if(resources[urlBG] is BitmapData)
-		{
-			var image:Bitmap = Bitmap(resources[urlBG]);
-			layerBG.addChild(image);
-		}
-		else
-		{
-			var loader:Loader = new Loader();
-			loader.contentLoaderInfo.addEventListener(Event.COMPLETE, completeHandler);
-			loader.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR, ioErrorHandler);
-			
-			var request:URLRequest = new URLRequest(urlBG);
-			loader.load(request);
-			layerBG.addChild(loader);
-		}
+	private function loadBG():void 
+	{
+		resources.load(urlBG,onLoad);
 	}
 	
-	private function completeHandler(event:Event):void {
-		var loader:Loader = Loader(event.target.loader);
-		resources[urlBG] = loader.content;
-		layerBG.removeChild(loader);
-		trace("BG content loaded");
-		trace(resources[urlBG]);
-		if(resources[urlBG] is Bitmap)
-		{
-			var image:Bitmap = Bitmap(resources[urlBG]);
-			layerBG.addChild(image);
-			trace("BG loaded");
-		}		
+	private function onLoad(img:Bitmap):void 
+	{
+		var image:Bitmap = new Bitmap(img.bitmapData);
+		layerBG.addChild(image);
+		trace("BG loaded");
 	}
 	
-	private function ioErrorHandler(event:IOErrorEvent):void {
-		trace("Unable to load image: " + urlBG);
-	}	
-	
-	
-	private function clickHandler(event:MouseEvent):void {
+	private function clickHandler(event:MouseEvent):void 
+	{
 		trace("clickHandler");
 	}
 	
 
-	private function mouseDownHandler(event:MouseEvent):void {
+	private function mouseDownHandler(event:MouseEvent):void 
+	{
 		trace("mouseDownHandler");
 		//draw(overSize, overSize, downColor);
 		
@@ -385,13 +395,15 @@ class FarmField extends Sprite
 	}
 	
 	
-	private function mouseWheelHandler(event:MouseEvent):void {
+	private function mouseWheelHandler(event:MouseEvent):void 
+	{
 		trace("mouseWheelHandler delta: " + event.delta);
 		scaleX=scaleX+event.delta/100;
 		scaleY=scaleY+event.delta/100;
 	}
 	
-	private function mouseUpHandler(event:MouseEvent):void {
+	private function mouseUpHandler(event:MouseEvent):void 
+	{
 		trace("mouseUpHandler");
 		//var sprite:Sprite = Sprite(event.target);
 		//sprite.removeEventListener(MouseEvent.MOUSE_MOVE, mouseMoveHandler);
