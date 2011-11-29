@@ -2,11 +2,10 @@ package {
 	import flash.display.Sprite;
 	import flash.display.StageAlign;
 	import flash.display.StageScaleMode;
-	import flash.geom.Point;
-	import flash.utils.flash_proxy;
-
 	import flash.events.*;
+	import flash.geom.Point;
 	import flash.net.XMLSocket;
+	import flash.utils.flash_proxy;
 	
 	public class MiniFarm extends Sprite {
 		private var field:FarmField = new FarmField();
@@ -47,8 +46,23 @@ package {
 		private function onIncomingData(event:DataEvent):void
 		{
 			trace("[" + event.type + "] " + event.data);
-			var xml:XML = new XML(event.data);
-			trace(xml);
+			var xmlField:XML = new XML(event.data);
+			trace(xmlField);
+			trace(xmlField.name());
+			if (xmlField.name()=="field")
+			{
+				field.beginRedraw();
+				for each (var xmlPlant:XML in xmlField.*) 
+				{ 
+					trace(" plant: " + xmlPlant.name()) 
+					trace(" plant: " + xmlPlant.@id) 
+					trace(" plant: " + xmlPlant.@x) 
+					trace(" plant: " + xmlPlant.@y) 
+					trace(" plant: " + xmlPlant.@stage) 
+					field.updatePlant(xmlPlant.name(),Number(xmlPlant.@id),Number(xmlPlant.@x),Number(xmlPlant.@y),Number(xmlPlant.@stage));
+				}
+				field.endRedraw();
+			}
 		}
 		
 		
@@ -61,7 +75,7 @@ package {
 			if (toPlant == null)
 			{
 				toPlant=new ToPlant();
-				field.addChild(toPlant);
+				field.layerNew.addChild(toPlant);
 			}
 			var p:Point=new Point(mouseX,mouseY);
 //			trace(mouseX);
@@ -161,6 +175,88 @@ class ToPlant extends Sprite
 	
 }
 
+import flash.display.Sprite;
+import flash.display.Bitmap;
+import flash.display.BitmapData;
+import flash.display.Loader;
+import flash.display.Sprite;
+import flash.events.*;
+import flash.events.MouseEvent;
+import flash.external.ExternalInterface;
+import flash.geom.Point;
+import flash.geom.Rectangle;
+import flash.net.URLRequest;
+
+class Plant extends Sprite
+{
+	public var checked:Boolean; 
+	public var id:int;
+	public var stageOfGrowth:int;
+	public var plantName:String;
+
+	private var image:Bitmap;
+	
+	public function Plant(plantName:String, plantId:int, plantX:int, plantY:int, plantStage:int)
+	{
+		this.id=plantId;
+		this.plantName=plantName;
+		this.x=plantX;
+		this.y=plantY;
+		this.stageOfGrowth=plantStage;
+		redraw();
+	}
+	
+	public function redraw():void
+	{
+		if (image!=null)
+		{
+			removeChild(image);
+		}
+		if(resources["../assets/"+plantName+"/"+stageOfGrowth.toString()+".png"] is BitmapData)
+		{
+			image=new Bitmap(resources["../assets/"+plantName+"/"+stageOfGrowth.toString()+".png"]);
+			addChild(image);
+		}
+		else
+		{
+			loadPic("../assets/"+plantName+"/"+stageOfGrowth.toString()+".png");
+		}
+			
+	}
+	
+	private function loadPic(url:String):void {
+		var loader:ResourceLoader = new ResourceLoader();
+		loader.contentLoaderInfo.addEventListener(Event.COMPLETE, completeHandler);
+		loader.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR, ioErrorHandler);
+		loader.url=url;
+		var request:URLRequest = new URLRequest(url);
+		loader.load(request);
+		addChild(loader);
+	}
+	
+	private function completeHandler(event:Event):void {
+		var loader:ResourceLoader = ResourceLoader(event.target.loader);
+		
+		resources[loader.url] = loader.content;
+		trace("plant content loaded "+loader.url);
+		trace(parent);
+		trace(resources[loader.url]);
+		if(resources[loader.url] is BitmapData)
+		{
+			image=new Bitmap(resources[loader.url]);
+			addChild(image);
+			trace("plant image loaded "+loader.url);
+			trace(parent);
+		}		
+//		var image:Bitmap = Bitmap(loader.content);
+//		addChild(image);
+	}
+	
+	private function ioErrorHandler(event:IOErrorEvent):void {
+		trace("Unable to load image: " + event.target.loader["url"]);
+	}		
+	
+}
 
 import flash.display.Bitmap;
 import flash.display.BitmapData;
@@ -176,30 +272,97 @@ import flash.net.URLRequest;
 class FarmField extends Sprite 
 {
 	private var urlBG:String = "../assets/BG.jpg";
+	private var plants:Object=new Object();
+	private var layerBG:Sprite=new Sprite();
+	private var layerPlants:Sprite=new Sprite();
+	public var layerNew:Sprite=new Sprite();
 
 	public function FarmField() {
+		addChild(layerBG);
+		addChild(layerPlants);
+		addChild(layerNew);
 		loadBG();		
 		addEventListener(MouseEvent.CLICK, clickHandler);
 		addEventListener(MouseEvent.MOUSE_DOWN, mouseDownHandler);
 		addEventListener(MouseEvent.MOUSE_UP, mouseUpHandler);
 		addEventListener(MouseEvent.MOUSE_WHEEL, mouseWheelHandler);
 	}
+
+	public function beginRedraw():void
+	{
+		for each (var plant:Plant in plants)
+		{
+			plant.checked=false;
+		}
+	}
+	
+	public function updatePlant(plantName:String, plantId:int, plantX:int, plantY:int, plantStage:int):void
+	{
+		if (plants[plantId]== undefined)
+		{
+			plants[plantId]=new Plant(plantName,plantId,plantX,plantY,plantStage);
+			
+			layerPlants.addChild(plants[plantId]);
+			trace("plant added at "+plantX+" "+plantY);
+		}
+		else if ( (plants[plantId].stageOfGrowth != plantStage) || (plants[plantId].x != plantX) || (plants[plantId].y != plantY) || (plants[plantId].plantName != plantName))
+		{
+			plants[plantId].x=plantX;
+			plants[plantId].y=plantY;
+			plants[plantId].stageOfGrowth=plantStage;
+			plants[plantId].plantName=plantName;
+			
+			plants[plantId].redraw();
+		}
+		plants[plantId].checked=true;
+			
+	}
+
+	public function endRedraw():void
+	{
+		for each (var plant:Plant in plants)
+		{
+			if (plant.checked===false)
+			{
+				layerPlants.removeChild(plant);
+				plants[plant.id]=undefined;
+			}
+		}
+	}
+	
 	
 	
 	private function loadBG():void {
-		var loader:Loader = new Loader();
-		loader.contentLoaderInfo.addEventListener(Event.COMPLETE, completeHandler);
-		loader.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR, ioErrorHandler);
 		
-		var request:URLRequest = new URLRequest(urlBG);
-		loader.load(request);
-		addChild(loader);
+		if(resources[urlBG] is BitmapData)
+		{
+			var image:Bitmap = Bitmap(resources[urlBG]);
+			layerBG.addChild(image);
+		}
+		else
+		{
+			var loader:Loader = new Loader();
+			loader.contentLoaderInfo.addEventListener(Event.COMPLETE, completeHandler);
+			loader.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR, ioErrorHandler);
+			
+			var request:URLRequest = new URLRequest(urlBG);
+			loader.load(request);
+			layerBG.addChild(loader);
+		}
 	}
 	
 	private function completeHandler(event:Event):void {
 		var loader:Loader = Loader(event.target.loader);
-		var image:Bitmap = Bitmap(loader.content);
-		addChild(image);
+		resources[urlBG] = loader.content;
+		layerBG.removeChild(loader);
+		trace("BG content loaded");
+		trace(resources[urlBG]);
+		if(resources[urlBG] is Bitmap)
+		{
+			var image:Bitmap = Bitmap(resources[urlBG]);
+			layerBG.addChild(image);
+			trace("BG loaded");
+		}		
 	}
 	
 	private function ioErrorHandler(event:IOErrorEvent):void {
