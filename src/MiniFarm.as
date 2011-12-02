@@ -5,7 +5,6 @@ package {
 	import flash.events.*;
 	import flash.geom.Point;
 	import flash.net.XMLSocket;
-	import flash.utils.flash_proxy;
 	
 	public class MiniFarm extends Sprite {
 		private var field:FarmField = new FarmField();
@@ -17,10 +16,9 @@ package {
 		public function MiniFarm() {
 			stage.scaleMode=StageScaleMode.NO_SCALE;
 			stage.align=StageAlign.TOP_LEFT;
-
+			
 			addChild(field);			
 			addChild(tb);
-			
 			
 			xmlSocket.connect("localhost", 11843);
 			
@@ -28,9 +26,8 @@ package {
 			connect();
 			//disconnect();
 			
-			
 		}
-
+		
 		
 		private function connect():void
 		{
@@ -65,10 +62,6 @@ package {
 			}
 		}
 		
-		
-		
-		
-		
 		public function startPlant():void
 		{
 			trace("startPlant");
@@ -78,23 +71,45 @@ package {
 				field.layerNew.addChild(newPlant);
 			}
 			var p:Point=new Point(mouseX,mouseY);
-//			trace(mouseX);
 			newPlant.x=field.globalToLocal(p).x-newPlant.width/2;
 			newPlant.y=field.globalToLocal(p).y-newPlant.height/2;
 			newPlant.startDrag();
 			newPlant.visible=true;
+			stage.addEventListener(KeyboardEvent.KEY_DOWN, keyDownHandler);
+			stage.focus=stage;
 		}
+		
+		private function keyDownHandler(event:KeyboardEvent):void 
+		{
+			trace("stage keyDownHandler "+event.charCode);
+			if(event.charCode==27)
+			{
+				newPlant.stopDrag();
+				newPlant.visible=false;
+			}
+		}		
+		
 		
 		public function finishPlant():void
 		{
 			newPlant.stopDrag();
-			xmlSocket.send("<newPlant><"+newPlant.plantName+" x=\""+newPlant.x.toString()+"\""+" y=\""+newPlant.y.toString()+"\" /></newPlant>");
+			xmlSocket.send("<newPlant><"+newPlant.plantName+" x=\""+Math.round(newPlant.x).toString()+"\""+" y=\""+Math.round(newPlant.y).toString()+"\" /></newPlant>");
 			newPlant.visible=false;
 		}
 		
 		
 	}
 }	
+
+import flash.display.Bitmap;
+import flash.display.Loader;
+import flash.display.SimpleButton;
+import flash.display.Sprite;
+import flash.events.*;
+import flash.geom.Point;
+import flash.net.URLRequest;
+import flash.text.TextField;
+import flash.text.TextFieldAutoSize;
 
 class Resources extends Object
 {
@@ -111,13 +126,13 @@ class Resources extends Object
 		else if(loaders[url] == undefined)
 		{
 			var loader:ResourceLoader = new ResourceLoader();
-			loaders[url] = new ResourceLoader();
-			loaders[url].contentLoaderInfo.addEventListener(Event.COMPLETE, completeHandler);
-			loaders[url].contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR, ioErrorHandler);
-			loaders[url].url=url;
-			loaders[url].onLoads.push(onLoad);
+			loader.contentLoaderInfo.addEventListener(Event.COMPLETE, completeHandler);
+			loader.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR, ioErrorHandler);
+			loader.url=url;
+			loader.onLoads.push(onLoad);
 			var request:URLRequest = new URLRequest(url);
-			loaders[url].load(request);
+			loader.load(request);
+			loaders[url]=loader;
 		}
 		else
 		{
@@ -128,7 +143,7 @@ class Resources extends Object
 	private function completeHandler(event:Event):void 
 	{
 		var loader:ResourceLoader = ResourceLoader(event.target.loader);
-
+		
 		cache[loader.url] = loader.content;
 		trace("Resources content loaded "+loader.url);
 		trace(cache[loader.url]);
@@ -147,30 +162,11 @@ class Resources extends Object
 
 var resources:Resources=new Resources();
 
-
-
-
-
-import flash.display.Loader;
 class ResourceLoader extends Loader
 {
 	public var url:String;
 	public var onLoads:Array=new Array();
 }
-
-
-
-import flash.display.Sprite;
-import flash.display.Bitmap;
-import flash.display.BitmapData;
-import flash.display.Loader;
-import flash.display.Sprite;
-import flash.events.*;
-import flash.events.MouseEvent;
-import flash.external.ExternalInterface;
-import flash.geom.Point;
-import flash.geom.Rectangle;
-import flash.net.URLRequest;
 
 class Plant extends Sprite
 {
@@ -209,23 +205,14 @@ class Plant extends Sprite
 		addChild(image);
 		afterLoad();
 	}
-
-	protected  function afterLoad():void{};
+	
+	protected  function afterLoad():void
+	{
+		y=y-height;
+	}
 	
 }
 
-
-
-import flash.display.Bitmap;
-import flash.display.BitmapData;
-import flash.display.Loader;
-import flash.display.Sprite;
-import flash.events.*;
-import flash.events.MouseEvent;
-import flash.external.ExternalInterface;
-import flash.geom.Point;
-import flash.geom.Rectangle;
-import flash.net.URLRequest;
 class NewPlant extends Plant 
 {
 	private var plantNames:Array=["sunflower","clover","potato"];
@@ -235,6 +222,7 @@ class NewPlant extends Plant
 		super(plantNames[0], 0, 0, 0, 5);
 		addEventListener(MouseEvent.CLICK, clickHandler);
 		addEventListener(MouseEvent.MOUSE_WHEEL, mouseWheelHandler);
+		addEventListener(KeyboardEvent.KEY_DOWN, keyDownHandler);
 		startDrag();
 	}
 	
@@ -246,9 +234,20 @@ class NewPlant extends Plant
 		y=p.y-height/2;
 	}
 	
+	private function keyDownHandler(event:KeyboardEvent):void {
+		trace("newPlant keyDownHandler "+event.charCode);
+		if(event.charCode==27)
+		{
+			stopDrag();
+			visible=false;
+		}
+	}
+	
+	
 	private function clickHandler(event:MouseEvent):void {
 		trace("newPlant clickHandler");
 		root["finishPlant"]();
+		event.stopPropagation();
 	}
 	
 	private function mouseWheelHandler(event:MouseEvent):void {
@@ -291,17 +290,10 @@ class NewPlant extends Plant
 	}
 }
 
-
-import flash.display.Bitmap;
-import flash.display.BitmapData;
-import flash.display.Loader;
-import flash.display.Sprite;
-import flash.events.*;
-import flash.events.MouseEvent;
-import flash.external.ExternalInterface;
-import flash.geom.Point;
-import flash.geom.Rectangle;
-import flash.net.URLRequest;
+import flash.display.LineScaleMode;
+import flash.display.CapsStyle;
+import flash.display.JointStyle;
+import flash.display.Shape;
 
 class FarmField extends Sprite 
 {
@@ -310,8 +302,9 @@ class FarmField extends Sprite
 	private var layerBG:Sprite=new Sprite();
 	private var layerPlants:Sprite=new Sprite();
 	public var layerNew:Sprite=new Sprite();
-
-	public function FarmField() {
+	
+	public function FarmField() 
+	{
 		addChild(layerBG);
 		addChild(layerPlants);
 		addChild(layerNew);
@@ -320,7 +313,85 @@ class FarmField extends Sprite
 		addEventListener(MouseEvent.MOUSE_DOWN, mouseDownHandler);
 		addEventListener(MouseEvent.MOUSE_UP, mouseUpHandler);
 		addEventListener(MouseEvent.MOUSE_WHEEL, mouseWheelHandler);
+		
+
+		var grid:Shape = new Shape();    
+		
+		grid.graphics.lineStyle(3, 0x00FF00, 0.6, false, LineScaleMode.VERTICAL,
+			CapsStyle.NONE, JointStyle.MITER, 10);
+		
+		
+		
+		grid.graphics.moveTo(tr3Dto2D(0,0).x, tr3Dto2D(0,0).y);
+		grid.graphics.lineTo(tr3Dto2D(0,889).x, tr3Dto2D(0,889).y);
+		grid.graphics.lineTo(tr3Dto2D(889,889).x, tr3Dto2D(889,889).y);
+		grid.graphics.lineTo(tr3Dto2D(889,0).x, tr3Dto2D(889,0).y);
+		grid.graphics.lineTo(tr3Dto2D(0,0).x, tr3Dto2D(0,0).y);
+
+		trace("0,0: "+tr3Dto2D(0,0).x+", "+tr3Dto2D(0,0).y);
+		trace("0,0: "+tr2Dto3D(tr3Dto2D(0,0).x,tr3Dto2D(0,0).y).x+", "+tr2Dto3D(tr3Dto2D(0,0).x,tr3Dto2D(0,0).y).y);
+
+		trace("0,889: "+tr3Dto2D(0,889).x+", "+tr3Dto2D(0,889).y);
+		trace("0,889: "+tr2Dto3D(tr3Dto2D(0,889).x,tr3Dto2D(0,889).y).x+", "+tr2Dto3D(tr3Dto2D(0,889).x,tr3Dto2D(0,889).y).y);
+		
+		trace("889,889: "+tr3Dto2D(889,889).x+", "+tr3Dto2D(889,889).y);
+		trace("889,889: "+tr2Dto3D(tr3Dto2D(889,889).x,tr3Dto2D(889,889).y).x+", "+tr2Dto3D(tr3Dto2D(889,889).x,tr3Dto2D(889,889).y).y);
+
+		trace("889,0: "+tr3Dto2D(889,0).x+", "+tr3Dto2D(889,0).y);
+		trace("889,0: "+tr2Dto3D(tr3Dto2D(889,0).x,tr3Dto2D(889,0).y).x+", "+tr2Dto3D(tr3Dto2D(889,0).x,tr3Dto2D(889,0).y).y);
+		
+		for (var x3D:Number=74.1;x3D<880;x3D+=74.1)
+		{
+			grid.graphics.moveTo(tr3Dto2D(x3D,0).x, tr3Dto2D(x3D,0).y);
+			grid.graphics.lineTo(tr3Dto2D(x3D,889).x, tr3Dto2D(x3D,889).y);
+		}		
+		for (var y3D:Number=74.1;y3D<880;y3D+=74.1)
+		{
+			grid.graphics.moveTo(tr3Dto2D(0,y3D).x, tr3Dto2D(0,y3D).y);
+			grid.graphics.lineTo(tr3Dto2D(889,y3D).x, tr3Dto2D(889,y3D).y);
+		}
+
+		layerNew.addChild(grid);	
+		
+		for (x3D=0;x3D<=880;x3D+=74.1*2)
+		{
+			for (y3D=0;y3D<=880;y3D+=74.1*2)
+			{
+				var p:Point=tr3Dto2D(x3D-34,y3D+39);
+				var plantX:Number=p.x;
+				var plantY:Number=p.y;
+				layerPlants.addChildAt(new Plant("sunflower",Math.random()*100000,plantX,plantY,5),0);
+			}
+		}
+		
 	}
+	
+	private function tr3Dto2D(x3D:Number,y3D:Number):Point
+	{
+		var x2D:Number = y3D * 0.7071 + x3D * 0.7071;
+		var y2D:Number = y3D * 0.3694 - x3D * 0.3694;
+		x2D=x2D+114;
+		y2D=y2D+432;
+		return new Point(x2D,y2D);
+	}
+	
+	private function tr2Dto3D(x2D:Number,y2D:Number):Point
+	{
+		x2D=x2D-114;
+		y2D=y2D-432;
+		var x3D:Number=x2D * 0.7071 - y2D * 1.3535;
+		var y3D:Number=x2D * 0.7071 + y2D * 1.3535;
+		return new Point(x3D,y3D);
+	}
+	
+//	private function tr2Dto3D(sX:Number,sY:Number):Point
+//	{
+//		var sX:Number = y * Math.cos(45*Math.PI/180) + x * Math.sin(45*Math.PI/180);
+//		var z1:Number = -x * Math.cos(45*Math.PI/180) + y * Math.sin(45*Math.PI/180);
+//		var sY:Number = z * Math.cos(-31.5*Math.PI/180) - z1 * Math.sin(-31.5*Math.PI/180);
+//		var z2:Number = z1 * Math.cos(-31.5*Math.PI/180) + z * Math.sin(-31.5*Math.PI/180);		
+//		return new Point(sX+114,sY+432);
+//	}
 
 	public function beginRedraw():void
 	{
@@ -349,9 +420,9 @@ class FarmField extends Sprite
 			plants[plantId].redraw();
 		}
 		plants[plantId].checked=true;
-			
+		
 	}
-
+	
 	public function endRedraw():void
 	{
 		for each (var plant:Plant in plants)
@@ -363,7 +434,6 @@ class FarmField extends Sprite
 			}
 		}
 	}
-	
 	
 	
 	private function loadBG():void 
@@ -383,14 +453,10 @@ class FarmField extends Sprite
 		trace("clickHandler");
 	}
 	
-
+	
 	private function mouseDownHandler(event:MouseEvent):void 
 	{
 		trace("mouseDownHandler");
-		//draw(overSize, overSize, downColor);
-		
-		//var sprite:Sprite = Sprite(event.target);
-		//sprite.addEventListener(MouseEvent.MOUSE_MOVE, mouseMoveHandler);
 		startDrag();
 	}
 	
@@ -405,10 +471,7 @@ class FarmField extends Sprite
 	private function mouseUpHandler(event:MouseEvent):void 
 	{
 		trace("mouseUpHandler");
-		//var sprite:Sprite = Sprite(event.target);
-		//sprite.removeEventListener(MouseEvent.MOUSE_MOVE, mouseMoveHandler);
 		stopDrag();
-		//draw(overSize, overSize, overColor);
 	}		
 	
 }
@@ -435,13 +498,7 @@ class Toolbar extends Sprite {
 	}	
 }
 
-import flash.display.DisplayObject;
-import flash.display.Shape;
-import flash.display.SimpleButton;
-import flash.display.Sprite;
-import flash.text.TextField;
-import flash.text.TextFieldAutoSize;
-import flash.text.TextFormat;
+
 
 class Button extends SimpleButton {
 	private var upColor:uint   = 0xCCCCCC;
