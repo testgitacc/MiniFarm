@@ -7,40 +7,50 @@ package {
 	import flash.net.XMLSocket;
 	
 	public class MiniFarm extends Sprite {
-		private var field:FarmField = new FarmField();
+		public var field:FarmField = new FarmField();
 		private var tb:Toolbar = new Toolbar();
-		private var newPlant:NewPlant;
+		public var newPlant:NewPlant;
 		
 		private var xmlSocket:XMLSocket = new XMLSocket();
-		
+
 		public function MiniFarm() {
 			stage.scaleMode=StageScaleMode.NO_SCALE;
 			stage.align=StageAlign.TOP_LEFT;
 			
 			addChild(field);			
 			addChild(tb);
+
+			tb.buttonPlant.addEventListener(MouseEvent.CLICK, buttonPlantClickHandler);
+			tb.buttonGrow.addEventListener(MouseEvent.CLICK, buttonGrowClickHandler);
+			tb.buttonHarvest.addEventListener(MouseEvent.CLICK, buttonHarvestClickHandler);
 			
 			xmlSocket.connect("localhost", 11843);
-			
-			xmlSocket.addEventListener(DataEvent.DATA, onIncomingData);
-			connect();
-			//disconnect();
-			
-		}
-		
-		
-		private function connect():void
-		{
+			xmlSocket.addEventListener(DataEvent.DATA, xmlSocketIncomingDataHandler);
 			xmlSocket.send("GET_FIELD");
+
+			stage.addEventListener(KeyboardEvent.KEY_DOWN, stageKeyDownHandler);
+			stage.focus=stage;
 		}
-		
-		private function disconnect():void
+
+		private function buttonPlantClickHandler(event:MouseEvent):void
 		{
-			xmlSocket.send("DISCONNECT");
-			//xmlSocket.close();
-		}
+			stopHarvest();
+			startPlant();
+		}		
 		
-		private function onIncomingData(event:DataEvent):void
+		private function buttonGrowClickHandler(event:MouseEvent):void
+		{
+			xmlSocket.send("GROW_UP");
+		}		
+		
+		private function buttonHarvestClickHandler(event:MouseEvent):void
+		{
+			cancelPlant();
+			startHarvest();
+		}		
+		
+		
+		private function xmlSocketIncomingDataHandler(event:DataEvent):void
 		{
 			trace("[" + event.type + "] " + event.data);
 			var xmlField:XML = new XML(event.data);
@@ -61,6 +71,17 @@ package {
 				field.endRedraw();
 			}
 		}
+
+		private function stageKeyDownHandler(event:KeyboardEvent):void 
+		{
+			trace("stage keyDownHandler "+event.charCode);
+			if(event.charCode==27)
+			{
+				cancelPlant();
+				stopHarvest();
+			}
+		}		
+		
 		
 		public function startPlant():void
 		{
@@ -69,34 +90,52 @@ package {
 			{
 				newPlant=new NewPlant();
 				field.layerNew.addChild(newPlant);
+				newPlant.redraw();
+				newPlant.addEventListener(MouseEvent.CLICK,newPlantClickHandler);
 			}
-			var p:Point=new Point(mouseX,mouseY);
-			newPlant.x=field.globalToLocal(p).x-newPlant.width/2;
-			newPlant.y=field.globalToLocal(p).y-newPlant.height/2;
+			newPlant.x=field.layerNew.mouseX-newPlant.width/2;
+			newPlant.y=field.layerNew.mouseY-newPlant.height+30;
+			newPlant.alpha=0.6;
 			newPlant.startDrag();
-			newPlant.visible=true;
-			stage.addEventListener(KeyboardEvent.KEY_DOWN, keyDownHandler);
-			stage.focus=stage;
+			field.layerNew.visible=true;
+			field.addEventListener(MouseEvent.MOUSE_MOVE, field.mouseMoveHandler);
 		}
 		
-		private function keyDownHandler(event:KeyboardEvent):void 
+		private function newPlantClickHandler(event:MouseEvent):void 
 		{
-			trace("stage keyDownHandler "+event.charCode);
-			if(event.charCode==27)
+			if(newPlant.gridX>0 && newPlant.gridY>0)
 			{
-				newPlant.stopDrag();
-				newPlant.visible=false;
+				trace("newPlantClickHandler "+newPlant.gridX+", "+newPlant.gridY);
+				finishPlant();
 			}
 		}		
 		
 		
+		public function cancelPlant():void
+		{
+			if(newPlant != null)
+			{
+				newPlant.stopDrag();
+				field.layerNew.visible=false;
+			}
+			field.removeEventListener(MouseEvent.MOUSE_MOVE, field.mouseMoveHandler);
+		}		
+		
 		public function finishPlant():void
 		{
-			newPlant.stopDrag();
-			xmlSocket.send("<newPlant><"+newPlant.plantName+" x=\""+Math.round(newPlant.x).toString()+"\""+" y=\""+Math.round(newPlant.y).toString()+"\" /></newPlant>");
-			newPlant.visible=false;
+			cancelPlant();
+			xmlSocket.send("<newPlant><"+newPlant.plantName+" x=\""+newPlant.gridX.toString()+"\""+" y=\""+newPlant.gridY.toString()+"\" /></newPlant>");
 		}
 		
+		public function startHarvest():void
+		{
+			
+		}
+		
+		public function stopHarvest():void
+		{
+			
+		}
 		
 	}
 }	
@@ -110,6 +149,7 @@ import flash.geom.Point;
 import flash.net.URLRequest;
 import flash.text.TextField;
 import flash.text.TextFieldAutoSize;
+import flash.utils.Timer;
 
 class Resources extends Object
 {
@@ -174,17 +214,22 @@ class Plant extends Sprite
 	public var id:int;
 	public var stageOfGrowth:int;
 	public var plantName:String;
+	public var gridX:int=0;
+	public var gridY:int=0;
 	
 	private var image:Bitmap;
 	
-	public function Plant(plantName:String, plantId:int, plantX:int, plantY:int, plantStage:int)
+	public function Plant(plantName:String, plantId:int, plantX:int, plantY:int, plantStage:int,draw:Boolean=true)
 	{
 		this.id=plantId;
 		this.plantName=plantName;
 		this.x=plantX;
 		this.y=plantY;
 		this.stageOfGrowth=plantStage;
-		redraw();
+		if (draw)
+		{
+			redraw();
+		}
 	}
 	
 	public function redraw():void
@@ -211,6 +256,12 @@ class Plant extends Sprite
 		y=y-height;
 	}
 	
+	public function index():String
+	{
+		var index:String=gridX+":"+gridY;
+		return index;
+	}
+	
 }
 
 class NewPlant extends Plant 
@@ -219,36 +270,30 @@ class NewPlant extends Plant
 	
 	public function NewPlant() 
 	{
-		super(plantNames[0], 0, 0, 0, 5);
-		addEventListener(MouseEvent.CLICK, clickHandler);
+		super(plantNames[0], 0, 0, 0, 5, false);
 		addEventListener(MouseEvent.MOUSE_WHEEL, mouseWheelHandler);
-		addEventListener(KeyboardEvent.KEY_DOWN, keyDownHandler);
-		startDrag();
+		addEventListener(MouseEvent.MOUSE_DOWN, mouseDownHandler);
+		addEventListener(MouseEvent.MOUSE_UP, mouseUpHandler);
 	}
 	
 	protected override function afterLoad():void
 	{
-		var p:Point=new Point(mouseX,mouseY);
-		p=parent.globalToLocal(localToGlobal(p));
-		x=p.x-width/2;
-		y=p.y-height/2;
-	}
-	
-	private function keyDownHandler(event:KeyboardEvent):void {
-		trace("newPlant keyDownHandler "+event.charCode);
-		if(event.charCode==27)
-		{
-			stopDrag();
-			visible=false;
-		}
+		var field:FarmField=root["field"];
+		field.mouseMoveHandler();
 	}
 	
 	
-	private function clickHandler(event:MouseEvent):void {
-		trace("newPlant clickHandler");
-		root["finishPlant"]();
+
+	private function mouseDownHandler(event:MouseEvent):void 
+	{
 		event.stopPropagation();
 	}
+	
+	private function mouseUpHandler(event:MouseEvent):void 
+	{
+		event.stopPropagation();
+	}		
+	
 	
 	private function mouseWheelHandler(event:MouseEvent):void {
 		trace("NewPlantmouseWheelHandler delta: " + event.delta);
@@ -307,20 +352,18 @@ class FarmField extends Sprite
 	{
 		addChild(layerBG);
 		addChild(layerPlants);
+		layerNew.visible=false;
 		addChild(layerNew);
 		loadBG();		
-		addEventListener(MouseEvent.CLICK, clickHandler);
 		addEventListener(MouseEvent.MOUSE_DOWN, mouseDownHandler);
 		addEventListener(MouseEvent.MOUSE_UP, mouseUpHandler);
 		addEventListener(MouseEvent.MOUSE_WHEEL, mouseWheelHandler);
-		
 
+		
 		var grid:Shape = new Shape();    
 		
 		grid.graphics.lineStyle(3, 0x00FF00, 0.6, false, LineScaleMode.VERTICAL,
 			CapsStyle.NONE, JointStyle.MITER, 10);
-		
-		
 		
 		grid.graphics.moveTo(tr3Dto2D(0,0).x, tr3Dto2D(0,0).y);
 		grid.graphics.lineTo(tr3Dto2D(0,889).x, tr3Dto2D(0,889).y);
@@ -328,18 +371,6 @@ class FarmField extends Sprite
 		grid.graphics.lineTo(tr3Dto2D(889,0).x, tr3Dto2D(889,0).y);
 		grid.graphics.lineTo(tr3Dto2D(0,0).x, tr3Dto2D(0,0).y);
 
-		trace("0,0: "+tr3Dto2D(0,0).x+", "+tr3Dto2D(0,0).y);
-		trace("0,0: "+tr2Dto3D(tr3Dto2D(0,0).x,tr3Dto2D(0,0).y).x+", "+tr2Dto3D(tr3Dto2D(0,0).x,tr3Dto2D(0,0).y).y);
-
-		trace("0,889: "+tr3Dto2D(0,889).x+", "+tr3Dto2D(0,889).y);
-		trace("0,889: "+tr2Dto3D(tr3Dto2D(0,889).x,tr3Dto2D(0,889).y).x+", "+tr2Dto3D(tr3Dto2D(0,889).x,tr3Dto2D(0,889).y).y);
-		
-		trace("889,889: "+tr3Dto2D(889,889).x+", "+tr3Dto2D(889,889).y);
-		trace("889,889: "+tr2Dto3D(tr3Dto2D(889,889).x,tr3Dto2D(889,889).y).x+", "+tr2Dto3D(tr3Dto2D(889,889).x,tr3Dto2D(889,889).y).y);
-
-		trace("889,0: "+tr3Dto2D(889,0).x+", "+tr3Dto2D(889,0).y);
-		trace("889,0: "+tr2Dto3D(tr3Dto2D(889,0).x,tr3Dto2D(889,0).y).x+", "+tr2Dto3D(tr3Dto2D(889,0).x,tr3Dto2D(889,0).y).y);
-		
 		for (var x3D:Number=74.1;x3D<880;x3D+=74.1)
 		{
 			grid.graphics.moveTo(tr3Dto2D(x3D,0).x, tr3Dto2D(x3D,0).y);
@@ -352,21 +383,35 @@ class FarmField extends Sprite
 		}
 
 		layerNew.addChild(grid);	
-		
-		for (x3D=0;x3D<=880;x3D+=74.1*2)
-		{
-			for (y3D=0;y3D<=880;y3D+=74.1*2)
-			{
-				var p:Point=tr3Dto2D(x3D-34,y3D+39);
-				var plantX:Number=p.x;
-				var plantY:Number=p.y;
-				layerPlants.addChildAt(new Plant("sunflower",Math.random()*100000,plantX,plantY,5),0);
-			}
-		}
-		
+
 	}
 	
-	private function tr3Dto2D(x3D:Number,y3D:Number):Point
+	
+	public function mouseMoveHandler(event:MouseEvent=null):void 
+	{
+		var newPlant:NewPlant=root["newPlant"];
+		var p3D:Point=tr2Dto3D(mouseX,mouseY);
+		if(p3D.x>0 && p3D.y>0 && p3D.x<889 && p3D.y<889)
+		{
+			newPlant.gridX=int(p3D.x/74.1)+1;
+			newPlant.gridY=int(p3D.y/74.1)+1;
+			var p2D:Point=tr3Dto2D((newPlant.gridX-1)*74.1-34,(newPlant.gridY-1)*74.1+39);
+			newPlant.x=p2D.x;
+			newPlant.y=p2D.y-newPlant.height;
+			newPlant.alpha=0.9;
+		}
+		else
+		{
+			newPlant.gridX=0;
+			newPlant.gridY=0;
+			newPlant.x=mouseX-newPlant.width/2;
+			newPlant.y=mouseY-newPlant.height+30;
+			newPlant.alpha=0.6;
+		}
+	}	
+	
+	
+	public function tr3Dto2D(x3D:Number,y3D:Number):Point
 	{
 		var x2D:Number = y3D * 0.7071 + x3D * 0.7071;
 		var y2D:Number = y3D * 0.3694 - x3D * 0.3694;
@@ -375,7 +420,7 @@ class FarmField extends Sprite
 		return new Point(x2D,y2D);
 	}
 	
-	private function tr2Dto3D(x2D:Number,y2D:Number):Point
+	public function tr2Dto3D(x2D:Number,y2D:Number):Point
 	{
 		x2D=x2D-114;
 		y2D=y2D-432;
@@ -384,42 +429,38 @@ class FarmField extends Sprite
 		return new Point(x3D,y3D);
 	}
 	
-//	private function tr2Dto3D(sX:Number,sY:Number):Point
-//	{
-//		var sX:Number = y * Math.cos(45*Math.PI/180) + x * Math.sin(45*Math.PI/180);
-//		var z1:Number = -x * Math.cos(45*Math.PI/180) + y * Math.sin(45*Math.PI/180);
-//		var sY:Number = z * Math.cos(-31.5*Math.PI/180) - z1 * Math.sin(-31.5*Math.PI/180);
-//		var z2:Number = z1 * Math.cos(-31.5*Math.PI/180) + z * Math.sin(-31.5*Math.PI/180);		
-//		return new Point(sX+114,sY+432);
-//	}
-
 	public function beginRedraw():void
 	{
 		for each (var plant:Plant in plants)
 		{
-			plant.checked=false;
+			if(plant!=null)
+			{
+				plant.checked=false;
+			}
 		}
 	}
 	
-	public function updatePlant(plantName:String, plantId:int, plantX:int, plantY:int, plantStage:int):void
+	public function updatePlant(plantName:String, plantId:int, gridX:int, gridY:int, plantStage:int):void
 	{
-		if (plants[plantId]== undefined)
+		var p2D:Point=tr3Dto2D((gridX-1)*74.1-34,(gridY-1)*74.1+39);
+		var index:String=gridX+":"+gridY;
+		if (plants[index]== undefined)
 		{
-			plants[plantId]=new Plant(plantName,plantId,plantX,plantY,plantStage);
-			
-			layerPlants.addChild(plants[plantId]);
-			trace("plant added at "+plantX+" "+plantY);
+			plants[index]=new Plant(plantName,plantId,p2D.x,p2D.y,plantStage);
+			plants[index].gridX=gridX;
+			plants[index].gridY=gridY;
+			layerPlants.addChild(plants[index]);
+			trace("plant added at "+gridX+" "+gridY);
 		}
-		else if ( (plants[plantId].stageOfGrowth != plantStage) || (plants[plantId].x != plantX) || (plants[plantId].y != plantY) || (plants[plantId].plantName != plantName))
+		else if ( (plants[index].stageOfGrowth != plantStage) || (plants[index].plantName != plantName))
 		{
-			plants[plantId].x=plantX;
-			plants[plantId].y=plantY;
-			plants[plantId].stageOfGrowth=plantStage;
-			plants[plantId].plantName=plantName;
-			
-			plants[plantId].redraw();
+			plants[index].x=p2D.x;
+			plants[index].y=p2D.y;
+			plants[index].stageOfGrowth=plantStage;
+			plants[index].plantName=plantName;
+			plants[index].redraw();
 		}
-		plants[plantId].checked=true;
+		plants[index].checked=true;
 		
 	}
 	
@@ -427,10 +468,10 @@ class FarmField extends Sprite
 	{
 		for each (var plant:Plant in plants)
 		{
-			if (plant.checked===false)
+			if (plant!=null && !plant.checked)
 			{
 				layerPlants.removeChild(plant);
-				plants[plant.id]=undefined;
+				plants[plant.index()]=null;
 			}
 		}
 	}
@@ -447,12 +488,6 @@ class FarmField extends Sprite
 		layerBG.addChild(image);
 		trace("BG loaded");
 	}
-	
-	private function clickHandler(event:MouseEvent):void 
-	{
-		trace("clickHandler");
-	}
-	
 	
 	private function mouseDownHandler(event:MouseEvent):void 
 	{
@@ -477,38 +512,41 @@ class FarmField extends Sprite
 }
 
 
-class Toolbar extends Sprite {
-	public function Toolbar(){
-		var b1:Button=new Button("Посадить");
-		b1.x=10;
-		b1.y=10;
-		addChild(b1);
-		b1.addEventListener(MouseEvent.CLICK, b1ClickHandler);
-		var b2:Button=new Button("Собрать");
-		b2.x=10;
-		b2.y=40;
-		addChild(b2);
-		var b3:Button=new Button("Сделать ход");
-		b3.x=10;
-		b3.y=70;
-		addChild(b3);
+
+
+
+class Toolbar extends Sprite 
+{
+	public var buttonPlant:Button=new Button("Посадить");
+	public var buttonGrow:Button=new Button("Сделать ход");
+	public var buttonHarvest:Button=new Button("Собрать");
+
+	public function Toolbar()
+	{
+		buttonPlant.x=10;
+		buttonPlant.y=10;
+		addChild(buttonPlant);
+		buttonGrow.x=10;
+		buttonGrow.y=40;
+		addChild(buttonGrow);
+		buttonHarvest.x=10;
+		buttonHarvest.y=70;
+		addChild(buttonHarvest);
 	}
-	private function b1ClickHandler(event:MouseEvent):void {
-		root["startPlant"]();
-	}	
 }
 
 
-
-class Button extends SimpleButton {
+class Button extends SimpleButton 
+{
 	private var upColor:uint   = 0xCCCCCC;
 	private var overColor:uint = 0xAAAAAA;
 	private var downColor:uint = 0xAAAAAA;
 	private var sizeW:uint      = 80;
 	private var sizeH:uint      = 20;
-	private var text:String;
+	public var text:String;
 	
-	public function Button(text:String) {
+	public function Button(text:String) 
+	{
 		this.text=text;
 		downState      = new ButtonDisplayState(text, downColor, sizeW, sizeH);
 		downState.x = x+3;
@@ -520,13 +558,15 @@ class Button extends SimpleButton {
 	}
 }
 
-class ButtonDisplayState extends Sprite {
+class ButtonDisplayState extends Sprite 
+{
 	private var bgColor:uint;
 	private var sizeW:uint;
 	private var sizeH:uint;
 	private var text:String;
 	
-	public function ButtonDisplayState(text:String, bgColor:uint, sizeW:uint, sizeH:uint) {
+	public function ButtonDisplayState(text:String, bgColor:uint, sizeW:uint, sizeH:uint) 
+	{
 		this.text = text;
 		this.bgColor = bgColor;
 		this.sizeW    = sizeW;
@@ -540,7 +580,8 @@ class ButtonDisplayState extends Sprite {
 		addChild(label);			
 	}
 	
-	private function draw():void {
+	private function draw():void 
+	{
 		graphics.beginFill(bgColor);
 		graphics.drawRect(0, 0, sizeW, sizeH);
 		graphics.endFill();

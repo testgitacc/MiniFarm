@@ -41,6 +41,17 @@ def new_plant(str)
   end
 end
 
+def grow_up
+  Plant.all.each { |plant|
+    plant.stage+=1
+    if plant.stage>5
+      plant.destroy
+    else
+      plant.save
+    end
+  }
+end
+
 puts "Starting the socket server"
  
 while true
