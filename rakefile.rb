@@ -36,6 +36,18 @@ desc "Compile and run the debug swf"
 flashplayer :run => "bin/MiniFarm-debug.swf"
 
 ##############################
+# Release
+
+# Compile the debug swf
+mxmlc "bin/MiniFarm.swf" do |t|
+  t.input = "src/MiniFarm.as"
+  t.debug = false
+end
+
+desc "Compile and run the swf"
+flashplayer :release => "bin/MiniFarm.swf"
+
+##############################
 # Test
 
 library :asunit4
