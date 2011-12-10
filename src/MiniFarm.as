@@ -266,7 +266,7 @@ class Plant extends Sprite
 	{
 		trace("plant onLoad "+img);
 		trace(this);
-		trace(id);
+		trace(this.id);
 		image=new Bitmap(img.bitmapData);
 		addChild(image);
 		afterLoad();
@@ -279,8 +279,7 @@ class Plant extends Sprite
 	
 	public function index():String
 	{
-		var index:String=gridX+":"+gridY;
-		return index;
+		return this.gridX+":"+this.gridY;
 	}
 	
 }
@@ -424,7 +423,7 @@ class FarmField extends Sprite
 			newPlant.x=p2D.x;
 			newPlant.y=p2D.y-newPlant.height;
 			newPlant.alpha=0.9;
-			if (plants[newPlant.gridX+":"+newPlant.gridY]!=undefined && plants[newPlant.gridX+":"+newPlant.gridY]!=null)
+			if (plants[newPlant.index()]!=undefined && plants[newPlant.index()]!=null)
 			{
 				newPlant.visible=false;
 			}
@@ -553,34 +552,33 @@ class FarmField extends Sprite
 			plants[index]=new Plant(plantName,plantId,p2D.x,p2D.y,plantStage);
 			plants[index].gridX=gridX;
 			plants[index].gridY=gridY;
-			layerPlants.addChild(plants[index]);
-			
-			if(plants[(gridX-1)+":"+(gridY)] != undefined && plants[(gridX-1)+":"+(gridY)] != null)
-			{
-				layerPlants.swapChildren(plants[index],plants[(gridX-1)+":"+(gridY)]);
-			}
-			if(plants[(gridX-1)+":"+(gridY+1)] != undefined && plants[(gridX-1)+":"+(gridY+1)] != null)
-			{
-				layerPlants.swapChildren(plants[index],plants[(gridX-1)+":"+(gridY+1)]);
-				//plants[(gridX-1)+":"+(gridY+1)].alpha=0.5;
-			}
-			if(plants[(gridX)+":"+(gridY+1)] != undefined && plants[(gridX)+":"+(gridY+1)] != null)
-			{
-				layerPlants.swapChildren(plants[index],plants[(gridX)+":"+(gridY+1)]);
-			}
-			
-			trace("plant added at "+gridX+" "+gridY);
+			layerPlants.addChildAt(plants[index],getPlace(plants[index]));
 		}
 		else if ( (plants[index].stageOfGrowth != plantStage) || (plants[index].plantName != plantName))
 		{
+			plants[index].id=plantId;
 			plants[index].x=p2D.x;
 			plants[index].y=p2D.y;
+			plants[index].gridX=gridX;
+			plants[index].gridY=gridY;
 			plants[index].stageOfGrowth=plantStage;
 			plants[index].plantName=plantName;
 			plants[index].redraw();
 		}
 		plants[index].checked=true;
 		
+	}
+	
+	private function getPlace(plant:Plant):int
+	{
+		for (var i:int=0;i<layerPlants.numChildren;i++)
+		{
+			if((Plant(layerPlants.getChildAt(i)).gridY>plant.gridY) || ((Plant(layerPlants.getChildAt(i)).gridY=plant.gridY) && (Plant(layerPlants.getChildAt(i)).gridX<plant.gridX)))
+			{
+				return i;
+			}
+		}
+		return layerPlants.numChildren;
 	}
 	
 	public function endRedraw():void
