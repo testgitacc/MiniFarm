@@ -628,10 +628,6 @@ class FarmField extends Sprite
 	
 }
 
-
-
-
-
 class Toolbar extends Sprite 
 {
 	public var buttonPlant:Button=new Button("Посадить");
